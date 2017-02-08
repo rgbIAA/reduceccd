@@ -20,7 +20,14 @@ The following scripts require these packages to be installed in order to run:
 + [ccdproc](https://github.com/astropy/ccdproc)
 + [photutils](https://github.com/astropy/photutils)
 
-Download the package and inside the directory type: 
+To install the package type in a terminal:
+
+```
+pip install https://github.com/rgbIAA/reduceccd/archive/master.zip
+```
+
+Or download the package and inside the directory type: 
+
 ```python
 python setup.py install
 ```
