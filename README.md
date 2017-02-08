@@ -42,8 +42,8 @@ path = '/User/me/route/to/my/raw/data/'
 # Output directory
 dout = 'redudir/'
 
-# If you want to reduce all filters, just write "None" 
-# If you want just to reduce a few filters, provide a list or string (one filter)
+# If you want to reduce all filters, leave "None"
+# If you just want to reduce a few filters, provide a list or a string
 filters = None # ['Ha6563', 'Ha6607', 'V', 'R', 'B']
 # Trim section (None otherwise)
 fits_section ='[:,:995]'
@@ -53,9 +53,33 @@ gain = 1.5 # +- 0.02 e / ADU
 readnoise = 8.23 # +- 0.12 e rms
 
 # If you want to reduce all objects, just write "None" 
-# If you want just to reduce a particular object(s), provide a list or string (one object)
+# If you just want to reduce a particular set of objects, provide a list or string (one object)
 objects = None # 'ngc7465'
 
 rc.reduceNight(path, filters, fits_section=fits_section, dout=dout, gain=gain, create_flat=True,
         create_bias=True, sky=True, correct_images=True, objects=objects, align=True)
 ```
+
+By default, `reduceNight` looks into the header of the images to sort the images by type in the following way:
+
++ Bias: keyword `imagetyp` = 'BIAS'
++ Flat: keyword `imagetyp` = 'FLAT'
++ Object: keyword `imagetyp` = 'LIGHT'
+
+You can modify the way `reduceNight` looks for the different types of images. Let's say one night you have the keyword `imagetyp` = 'FLAT' in the header of some flats, and in others you have the string "flat" in the name of the file (but not in the header). You can give an OR searching command like a list of dictionaries:
+
+```python
+dfilter_flat = [{'imagetyp':'FLAT'}, {'find':'flat'}]
+rc.reduceNight(path, filters, fits_section=fits_section, dout=dout, gain=gain, dfilter_flat=dfilter_flat)
+```
+`reduceNight` will take as flats files that *either* contain the keyword `imagetyp` = 'BIAS' in the header OR the file has the string "flat" in its name ('find' is the dictionary keyword to search for a string in a file name).
+
+You can also provide AND instances for searching files just adding more keywords in the SAME dictionary:
+
+```python
+dfilter_flat = {'imagetyp':'FLAT', 'find':'flat'}
+rc.reduceNight(path, filters, fits_section=fits_section, dout=dout, gain=gain, dfilter_flat=dfilter_flat)
+```
+In this case, `reduceNight` will take as flats files that contain the keyword `imagetyp` = 'BIAS' in the header AND the file has the string "flat" in its name.
+
+There is a `dfilter_bias` and `dfilter_images` for bias and science images, respectively. 
