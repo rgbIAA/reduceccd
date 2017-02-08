@@ -8,7 +8,7 @@ Basic Image CCD reduction using CCDPROC package
 + Performs bias and flat fielding correction of the science images
 + Cosmic ray removal
 + Sky subtraction
-+ Aligning and combination of images of the same filter
++ Align and combination of images of the same filter
 
 # Instalation instructions
 
