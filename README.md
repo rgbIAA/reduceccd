@@ -66,13 +66,13 @@ By default, `reduceNight` looks into the header of the images to sort the images
 + Flat: keyword `imagetyp` = 'FLAT'
 + Object: keyword `imagetyp` = 'LIGHT'
 
-You can modify the way `reduceNight` looks for the different types of images. Let's say one night you have the keyword `imagetyp` = 'FLAT' in the header of some flats, and in others you have the string "flat" in the name of the file (but not in the header). You can give an OR searching command like a list of dictionaries:
+You can modify the way `reduceNight` looks for the different types of images. Let's say one night you have the keyword `imagetyp` = 'FLAT' in the header of some flats, and in others you have the string "flat" in the name of the file, but NOT in the header. You can give an OR search command in the form of a list of dictionaries:
 
 ```python
 dfilter_flat = [{'imagetyp':'FLAT'}, {'find':'flat'}]
 rc.reduceNight(path, filters, fits_section=fits_section, dout=dout, gain=gain, dfilter_flat=dfilter_flat)
 ```
-`reduceNight` will take as flats files that *either* contain the keyword `imagetyp` = 'BIAS' in the header OR the file has the string "flat" in its name ('find' is the dictionary keyword to search for a string in a file name).
+`reduceNight` will take as flats files that *either* have the keyword `imagetyp` = 'BIAS' in the header OR files that contain the string "flat" in their names ('find' is the dictionary keyword to search for a string in a file name).
 
 You can also provide AND instances for searching files just adding more keywords in the SAME dictionary:
 
@@ -80,6 +80,6 @@ You can also provide AND instances for searching files just adding more keywords
 dfilter_flat = {'imagetyp':'FLAT', 'find':'flat'}
 rc.reduceNight(path, filters, fits_section=fits_section, dout=dout, gain=gain, dfilter_flat=dfilter_flat)
 ```
-In this case, `reduceNight` will take as flats files that contain the keyword `imagetyp` = 'BIAS' in the header AND the file has the string "flat" in its name.
+In this case, `reduceNight` will consider flats files that have the keyword `imagetyp` = 'BIAS' in the header AND files that contain the string "flat" in their names.
 
-There is a `dfilter_bias` and `dfilter_images` for bias and science images, respectively. 
+There is also a `dfilter_bias` and `dfilter_images` for bias and science images, respectively. 
