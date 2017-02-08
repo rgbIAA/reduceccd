@@ -27,7 +27,7 @@ python setup.py install
 
 ## Instructions
 
-If the images contain the basic information in the header, a standar reduction script would be something like:
+If the images contain the basic information in the header, a standard reduction script would be something like:
 
 ```python
 import reduceccd as rc
