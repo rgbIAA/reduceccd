@@ -32,7 +32,7 @@ Or download the package and inside the directory type:
 python setup.py install
 ```
 
-## Instructions
+# Instructions
 
 If the images contain the basic information in the header, a standard reduction script would be something like:
 
