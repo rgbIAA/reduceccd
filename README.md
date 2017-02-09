@@ -57,7 +57,6 @@ fits_section ='[:,:995]'
 
 # CCD info
 gain = 1.5 # +- 0.02 e / ADU
-readnoise = 8.23 # +- 0.12 e rms
 
 # If you want to reduce all objects, just write "None" 
 # If you just want to reduce a particular set of objects, provide a list or string (one object)
