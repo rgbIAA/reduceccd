@@ -1,12 +1,12 @@
 ############################################################################
 #                  Image reduction with CCDPROC package                    #
 #                                                                          #
-#                             VERSION: 0.0.3                               #
+#                             VERSION: 0.0.4                               #
 #                                                                          #
 #                          Ruben Garcia-Benito                             #
 #                                RGB@IAA                                   #
 #                                                                          #
-#                       Last Change: 2017/01/31                            #
+#                       Last Change: 2017/02/12                            #
 ############################################################################
 
 from photutils import Background2D, SigmaClip, MedianBackground, MeanBackground
@@ -30,7 +30,7 @@ import os
 import re
 
 ################################ VERSION ###################################
-VERSION = '0.0.3'                                                          #
+VERSION = '0.0.4'                                                          #
 ############################################################################
 
 
@@ -196,6 +196,23 @@ def cleanCosmic(ccd, mbox=15, rbox=15, gbox=11, sigclip=5, cleantype="medmask", 
         ccd.header['COSMIC'] = ctype.upper()
     return ccd
 
+def shiftCCDData(image, ref_image, precision=100, copy=True):
+    if isinstance(ref_image, CCDData):
+        ref_image = ref_image.data
+    if copy:
+        image = image.copy()
+    shift, error, diffphase = register_translation(image.data, ref_image, precision)
+    image.data = interpolation.shift(image.data, (-shift[0], -shift[1]))
+    if image.uncertainty is not None:
+        image.uncertainty.array = interpolation.shift(image.uncertainty.array, (-shift[0], -shift[1]))
+    if image.mask is not None:
+        image.mask = interpolation.shift(image.mask, (-shift[0], -shift[1]))
+    image.header['SHIFT'] = (-shift[0], -shift[1])
+    image.header['PRECISION'] = precision
+    image.header['ESHIFT'] = error
+    image.header['DIFFPHASE'] = diffphase
+    return image
+
 def create_master_bias(list_files, fitsfile=None, fits_section=None, gain=None, method='median', 
 	dfilter={'imagetyp':'bias'}, mask=None, key_find='find', invert_find=False, sjoin=','):
     if gain is not None and not isinstance(gain, u.Quantity):
@@ -232,6 +249,9 @@ def create_master_flat(list_files, flat_filter=None, fitsfile=None, bias=None, f
     if dfilter is not None and key_filter is not None and flat_filter is not None:
         dfilter = addKeysListDict(dfilter, {key_filter: flat_filter})
     list_files = getListFiles(list_files, dfilter, mask, key_find=key_find, invert_find=invert_find)
+    if len(list_files) == 0:
+        print ('WARNING: No FLAT files available for filter "%s"' % flat_filter)
+        return 
     for filename in list_files:
         ccd = CCDData.read(filename, unit= u.adu)
         trimmed = True if fits_section is not None else False
@@ -270,6 +290,9 @@ def create_master_flat_from_dict(list_files, dflat, verbose=True, **kwargs):
 def ccdproc_images_filter(list_files, image_filter=None, master_flat=None, master_bias=None, fits_section=None, gain=None, readnoise=None, 
 	error=False, sky=True, dout=None, cosmic=False, mbox=15, rbox=15, gbox=11, cleantype="medmask", cosmic_method='lacosmic', 
 	sigclip=5, key_filter='filter', dfilter={'imagetyp':'LIGHT'}, mask=None, key_find='find', invert_find=False, **kwargs):
+    if error and (gain is None or readnoise is None):
+        print ('WARNING: You need to provide "gain" and "readnoise" to compute the error!')
+        return
     if gain is not None and not isinstance(gain, u.Quantity):
         gain = gain * u.electron / u.adu
     if readnoise is not None and not isinstance(readnoise, u.Quantity):
@@ -300,14 +323,12 @@ def ccdproc_images_filter(list_files, image_filter=None, master_flat=None, maste
         nccd.write(filename, clobber=True)
     return dccd
 
-def ccdproc_images(list_files, dmaster_flat, master_bias=None, fits_section=None, gain=None, sky=True, dout=None, verbose=True, **kwargs):
+def ccdproc_images(list_files, dmaster_flat, master_bias=None, fits_section=None, sky=True, verbose=True, **kwargs):
     dccd_images = {}
-    if gain is not None and not isinstance(gain, u.Quantity):
-        gain = gain * u.electron / u.adu
     for filt in dmaster_flat:
         if verbose:
             print ('>>> Reducing Filter: %s' % filt)
-        dccd = ccdproc_images_filter(list_files, filt, master_flat=dmaster_flat[filt], master_bias=master_bias, fits_section=fits_section, gain=gain, sky=sky, dout=dout, **kwargs)
+        dccd = ccdproc_images_filter(list_files, filt, master_flat=dmaster_flat[filt], master_bias=master_bias, fits_section=fits_section, sky=sky, **kwargs)
         dccd_images[filt] = dccd
     return dccd_images
 
@@ -423,24 +444,23 @@ def align_combine_images(list_files, fitsfile, ref_image_fits=None, precision=10
     lexp = [ref_image.header[hexp]]
     all_images = [os.path.basename(ref_image_fits)]
     for img in list_files:
-        image, hdr = pyfits.getdata(img, header=True)
+        image = fits2CCDData(img, single=True)
         image_suffix = suffix if suffix is not None else img.split('.')[-1]
-        if 'REFIMA' in hdr and 'IMAGES' in hdr and not force:
+        if 'REFIMA' in image.header and 'IMAGES' in image.header and not force:
             continue
         if cosmic:
-            image, _ = cleanCosmic(nccd, mbox=mbox, rbox=rbox, gbox=gbox, sigclip=sigclip, cleantype=cleantype, cosmic_method=cosmic_method)
+            image = cleanCosmic(image, mbox=mbox, rbox=rbox, gbox=gbox, sigclip=sigclip, cleantype=cleantype, cosmic_method=cosmic_method)
         if align:
-            shift, error, diffphase = register_translation(image, ref_image.data, precision)
-            offset_image = interpolation.shift(image, (-shift[0], -shift[1]))
+            offset_image = shiftCCDData(image, ref_image, precision=precision)
             img_shifted = '%s_shift.%s' % (img.split('.fit')[0], image_suffix)
             all_images.append(os.path.basename(img_shifted))
             img_shifted = join_path(img_shifted, dout)
-            pyfits.writeto(img_shifted, offset_image, clobber=True)
-            lccd.append(CCDData(offset_image, unit=ref_image.unit))
+            offset_image.write(img_shifted, clobber=True)
+            lccd.append(offset_image)
         else:
             all_images.append(os.path.basename(img))
-            lccd.append(CCDData(image, unit=ref_image.unit))
-        lexp.append(hdr[hexp])
+            lccd.append(image)
+        lexp.append(image.header[hexp])
         #iraf.unlearn("imshift")
         #iraf.imshift.interp_type = "spline3"
         #iraf.imshift(img, img, shift[1], shift[0])
@@ -508,7 +528,7 @@ def reduceNight(path, filters=None, fits_section=None, date=None, dout=None, cre
 	dict_combine={}, method='median', mask_bias=None, dfilter_bias={'imagetyp':'bias'}, lfits_bias=None, 
 	invert_find_bias=False, dfilter_flat={'imagetyp':'FLAT'}, mask_flat=None, cosmic_method='lacosmic', 
 	invert_find_flat=False, dfilter_images={'imagetyp':'LIGHT'}, mask_images=None, key_find='find', 
-	key_filter='filter', find_obj=True, invert_find_images=False, find_filter=True, 
+	key_filter='filter', find_obj=True, invert_find_images=False, find_filter=True, error=False, 
 	invert_find_align=False, suffix=None, dict_align_combine={}, verbose=True):
 
     if date is None:
@@ -578,7 +598,8 @@ def reduceNight(path, filters=None, fits_section=None, date=None, dout=None, cre
     if correct_images:
         ccdproc_images(ic_all, dccd_master_flat, master_bias=ccd_master_bias, fits_section=fits_section, gain=gain, dout=dout, sky=sky_before, 
 		cosmic=cosmic, mbox=mbox, rbox=rbox, gbox=gbox, cleantype=cleantype, cosmic_method=cosmic_method, key_filter=key_filter,
-        	dfilter=dfilter_images, mask=mask_images, key_find=key_find, invert_find=invert_find_images, verbose=verbose, **dict_sky)
+        	dfilter=dfilter_images, mask=mask_images, key_find=key_find, invert_find=invert_find_images, verbose=verbose, 
+		readnoise=readnoise, error=error, **dict_sky)
 
     # ----------- Align and combine -------------------
     if combine:
