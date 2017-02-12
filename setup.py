@@ -4,7 +4,7 @@ import sys
 import os
 
 # VERSION 
-VERSION = '0.0.3'
+VERSION = '0.0.4'
 
 # Get some values from the setup.cfg
 try:
@@ -27,7 +27,7 @@ setup(name=PACKAGENAME,
       version=VERSION,
       description=DESCRIPTION,
       install_requires=['astropy', 'numpy', 'scipy', 'ccdproc',
-                        'photutils'],
+                        'photutils', 'skimage'],
       packages=find_packages(),
       author=AUTHOR,
       author_email=AUTHOR_EMAIL,

@@ -19,6 +19,7 @@ The following scripts require these packages to be installed in order to run:
 + astropy
 + [ccdproc](https://github.com/astropy/ccdproc)
 + [photutils](https://github.com/astropy/photutils)
++ [skimage](http://scikit-image.org/)
 
 To install the package type in a terminal:
 
@@ -54,16 +55,20 @@ dout = 'redudir/'
 filters = None # ['Ha6563', 'Ha6607', 'V', 'R', 'B']
 # Trim section (None otherwise)
 fits_section ='[:,:995]'
+# Calculate uncertainty and propagate error (requires BOTH gain and readnoise)
+error = True 
 
 # CCD info
 gain = 1.5 # +- 0.02 e / ADU
+readnoise = 8.23 # +- 0.12 e rms
 
 # If you want to reduce all objects, just write "None" 
 # If you just want to reduce a particular set of objects, provide a list or string (one object)
 objects = None # 'ngc7465'
 
-rc.reduceNight(path, filters, fits_section=fits_section, dout=dout, gain=gain, create_flat=True,
-        create_bias=True, sky=True, correct_images=True, objects=objects, align=True)
+rc.reduceNight(path, filters, fits_section=fits_section, dout=dout, gain=gain, readnoise=readnoise, 
+	create_flat=True, create_bias=True, sky=True, correct_images=True, objects=objects, 
+	align=True, error=error)
 ```
 
 By default, `reduceNight` looks into the header of the images to sort the images by type in the following way:
