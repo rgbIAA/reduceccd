@@ -4,7 +4,7 @@ import sys
 import os
 
 # VERSION 
-VERSION = '0.0.4'
+VERSION = '0.0.5'
 
 # Get some values from the setup.cfg
 try:
