@@ -1,17 +1,18 @@
 ############################################################################
 #                  Image reduction with CCDPROC package                    #
 #                                                                          #
-#                             VERSION: 0.0.4                               #
+#                             VERSION: 0.0.5                               #
 #                                                                          #
 #                          Ruben Garcia-Benito                             #
 #                                RGB@IAA                                   #
 #                                                                          #
-#                       Last Change: 2017/02/12                            #
+#                       Last Change: 2017/02/23                            #
 ############################################################################
 
 from photutils import Background2D, SigmaClip, MedianBackground, MeanBackground
 from photutils import SExtractorBackground, BiweightLocationBackground
 from photutils import ModeEstimatorBackground, MMMBackground
+from ccdproc.utils.slices import slice_from_string
 from skimage.feature import register_translation
 from astropy.stats import sigma_clipped_stats 
 from scipy.ndimage import interpolation
@@ -30,7 +31,7 @@ import os
 import re
 
 ################################ VERSION ###################################
-VERSION = '0.0.4'                                                          #
+VERSION = '0.0.5'                                                          #
 ############################################################################
 
 
@@ -196,21 +197,88 @@ def cleanCosmic(ccd, mbox=15, rbox=15, gbox=11, sigclip=5, cleantype="medmask", 
         ccd.header['COSMIC'] = ctype.upper()
     return ccd
 
-def shiftCCDData(image, ref_image, precision=100, copy=True):
+def cropImage(image, trim=None, zoom=None, center=None, pixels=None, width=None):
+    if isinstance(image, str):
+        image = fits2CCDData(image, single=True).data
+    if trim is not None:
+        return image[slice_from_string(trim)]
+    if center is None:
+        center = (image.shape[0] / 2, image.shape[1] / 2)
+    dy, dx = image.shape
+    if zoom is not None:
+        if isinstance(zoom, (list, tuple)):
+            xzoom, yzoom = zoom
+        else:
+            xzoom, yzoom = zoom, zoom
+        if xzoom < 1.0 or yzoom < 1.0:
+            print ('WARNING: Zoom needs to be >= 1.0 [%s, %s]! Nothing done!' % (xzoom, yzoom))
+            return image
+        dy /= yzoom 
+        dx /= xzoom
+        idy = slice(center[0] - int(dy / 2), center[0] + int(dy / 2), None)
+        idx = slice(center[1] - int(dx / 2), center[1] + int(dx / 2), None)
+        image = image[idy, idx]
+    elif pixels is not None:
+        if isinstance(pixels, (tuple, list, np.ndarray)):
+            ypix, xpix = pixels
+        else:
+            ypix, xpix = pixels, pixels
+        if ypix is not None:
+            image = image[ypix : dy - ypix, ...]
+        if xpix is not None:
+            image = image[..., xpix: dx - xpix]
+    elif width is not None:
+        if isinstance(width, (tuple, list, np.ndarray)):
+            ywidth, xwidth = width
+        else:
+            ywidth, xwidth = width, width
+        if ywidth is not None:
+            idy = slice(center[0] - int(ywidth / 2), center[0] + int(ywidth / 2), None)
+            image = image[idy, ...]
+        if xwidth is not None:
+            idx = slice(center[1] - int(xwidth / 2), center[1] + int(xwidth / 2), None)
+            image = image[..., idx]
+    return image
+
+def shiftImage(image, ref_image, precision=100, shift=None, trim=None, zoom=None, center=None, 
+	pixels=None, width=None, ref_trim=None, ref_zoom=None, ref_center=None, ref_pixels=None,
+	ref_width=None, copy_crop=True, copy=True):
+    if isinstance(image, str):
+        image = fits2CCDData(image, single=True)
+    if isinstance(ref_image, str):
+        ref_image = fits2CCDData(ref_image, single=True)
     if isinstance(ref_image, CCDData):
         ref_image = ref_image.data
     if copy:
         image = image.copy()
-    shift, error, diffphase = register_translation(image.data, ref_image, precision)
+    if shift is None:
+        if copy_crop:
+            if ref_trim is None:
+                ref_trim = trim
+            if ref_zoom is None:
+                ref_zoom = zoom
+            if ref_center is None:
+                ref_center = center
+            if ref_pixels is None:
+                ref_pixels = pixels
+            if ref_width is None:
+                ref_width = width
+        idata = cropImage(image.data, trim=trim, zoom=zoom, center=center, pixels=pixels, width=width)
+        rdata = cropImage(ref_image, trim=ref_trim, zoom=ref_zoom, center=ref_center, pixels=ref_pixels, width=ref_width)
+        shift, error, diffphase = register_translation(idata, rdata, precision)
+    else:
+        error = None
     image.data = interpolation.shift(image.data, (-shift[0], -shift[1]))
     if image.uncertainty is not None:
         image.uncertainty.array = interpolation.shift(image.uncertainty.array, (-shift[0], -shift[1]))
     if image.mask is not None:
         image.mask = interpolation.shift(image.mask, (-shift[0], -shift[1]))
-    image.header['SHIFT'] = (-shift[0], -shift[1])
-    image.header['PRECISION'] = precision
-    image.header['ESHIFT'] = error
-    image.header['DIFFPHASE'] = diffphase
+    image.header['YSHIFT'] = -shift[0]
+    image.header['XSHIFT'] = -shift[1]
+    if error is not None:
+       image.header['PRECISION'] = precision
+       image.header['ESHIFT'] = error
+       image.header['DIFFPHASE'] = diffphase
     return image
 
 def create_master_bias(list_files, fitsfile=None, fits_section=None, gain=None, method='median', 
@@ -372,7 +440,7 @@ def subtract_sky_ccd_mask(ccd, skysub='SKYSUB', skyval='SKYVAL', snr=3, npixels=
     ccd.header['SKYTYPE'] = '1D'
     return ccd
 
-def subtract_sky_ccd_2d(ccd, skysub='SKYSUB', skyval='SKYVAL', box_size=(50,50), filter_size=(3,3), method='sextractor', 
+def subtract_sky_ccd_2d(ccd, skysub='SKYSUB', skyval='SKYVAL', box_size=(50,50), filter_size=(3,3), bkg_method='sextractor', 
 	check_skysub=True, max_val=10000, fitsky=None, sigma=3., iters=10, edge_method='crop'):
     # Although edge_method='pad' is recommended, it does give errors "total size of new array must be unchanged" for v0.3
     if check_skysub and skysub is not None and skysub in ccd.header and ccd.header[skysub]:
@@ -383,11 +451,11 @@ def subtract_sky_ccd_2d(ccd, skysub='SKYSUB', skyval='SKYVAL', box_size=(50,50),
     dsky = {'median': MedianBackground(), 'mean': MeanBackground(), 'sextractor': SExtractorBackground(), 
 	'biweight': BiweightLocationBackground(), 'mode': ModeEstimatorBackground(), 'mm': MMMBackground()}
 
-    if not method in dsky:
+    if not bkg_method in dsky:
         print ('WARNING: Background type "%s" NOT available!! Selecting "median" from [%s]' % (bkg_type, ' | '.join(dksy.keys())))
         bkg_estimator = dksy['median']
     else:
-        bkg_estimator = dsky[method]
+        bkg_estimator = dsky[bkg_method]
 
     sigma_clip = SigmaClip(sigma=sigma, iters=iters) if sigma is not None and iters is not None else None
 
@@ -403,7 +471,7 @@ def subtract_sky_ccd_2d(ccd, skysub='SKYSUB', skyval='SKYVAL', box_size=(50,50),
     ccd.header[skysub] = True
     ccd.header[skyval] = bkg.background_median
     ccd.header['SKYTYPE'] = '2D'
-    ccd.header['BKGTYPE'] = method
+    ccd.header['BKGTYPE'] = bkg_method
     ccd.bkg = bkg
     if fitsky is not None:
         pyfits.writeto(fitsky, bkg.background, clobber=True)
@@ -433,8 +501,8 @@ def subtract_sky_ccds(lccd, method='2d', **kwargs):
 def align_combine_images(list_files, fitsfile, ref_image_fits=None, precision=100, dout=None, hexp='EXPTIME', force=False, 
 	minmax_clip=False, minmax_clip_min=0.0, sigma_clip=True, date=None, clip_extrema=False, func=np.ma.median, sigclip=5, 
 	cosmic=False, mbox=15, rbox=15, gbox=11, cleantype="medmask", cosmic_method='lacosmic', sky=False, dict_sky={}, 
-	dict_combine={}, suffix=None, hfilter='FILTER', key_file='file', hobj='OBJECT', ext=0, method='average', 
-	align=True):
+	dict_combine={}, suffix=None, hfilter='FILTER', key_file='file', hobj='OBJECT', ext=0, method='median', 
+	align=True, **kwargs):
     if ref_image_fits is None:
         tobj = getTimeTable(list_files, key_time=hexp, key_file=key_file, ext=ext, abspath=True, mask=-1, sort=True, clean=True)
         ref_image_fits, list_files = tobj[key_file][-1], tobj[key_file][:-1].data.tolist()
@@ -451,7 +519,7 @@ def align_combine_images(list_files, fitsfile, ref_image_fits=None, precision=10
         if cosmic:
             image = cleanCosmic(image, mbox=mbox, rbox=rbox, gbox=gbox, sigclip=sigclip, cleantype=cleantype, cosmic_method=cosmic_method)
         if align:
-            offset_image = shiftCCDData(image, ref_image, precision=precision)
+            offset_image = shiftImage(image, ref_image, precision=precision, **kwargs)
             img_shifted = '%s_shift.%s' % (img.split('.fit')[0], image_suffix)
             all_images.append(os.path.basename(img_shifted))
             img_shifted = join_path(img_shifted, dout)
@@ -549,14 +617,17 @@ def reduceNight(path, filters=None, fits_section=None, date=None, dout=None, cre
     if suffix is None:
         suffix = ic_all.summary['file'][0].split('.')[-1]
    
-    
     if filters is None:
         filters = getFilters(ic_all)
         print ('>>> Filters found: %s' % ' | '.join(filters))
+    if not isinstance(filters, (list, tuple, np.ndarray)):
+        filters = [filters]
 
     if objects is None:
         objects = getObjects(ic_all)
         print ('>>> Objects found: %s' % ' | '.join(objects))
+    if not isinstance(filters, (list, tuple, np.ndarray)):
+        objects = [objects]
 
     # Sky option
     if sky:
