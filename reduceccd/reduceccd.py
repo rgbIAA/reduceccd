@@ -6,7 +6,7 @@
 #                          Ruben Garcia-Benito                             #
 #                                RGB@IAA                                   #
 #                                                                          #
-#                       Last Change: 2017/02/23                            #
+#                       Last Change: 2017/02/27                            #
 ############################################################################
 
 from photutils import Background2D, SigmaClip, MedianBackground, MeanBackground
@@ -299,6 +299,7 @@ def create_master_bias(list_files, fitsfile=None, fits_section=None, gain=None, 
         combine.header.set('GAIN', gain.value, gain.unit)
     combine.header['CGAIN'] = True if gain is not None else False
     combine.header['IMAGETYP'] = 'BIAS'
+    combine.header['CMETHOD'] = method
     combine.header['CCDVER'] = VERSION
     if sjoin is not None:
         combine.header['LBIAS'] = sjoin.join([os.path.basename(fits) for fits in list_files])
@@ -336,6 +337,7 @@ def create_master_flat(list_files, flat_filter=None, fitsfile=None, bias=None, f
         combine.header.set('GAIN', gain.value, gain.unit)
     combine.header['CGAIN'] = True if gain is not None else False
     combine.header['IMAGETYP'] = 'FLAT'
+    combine.header['CMETHOD'] = method
     combine.header['CCDVER'] = VERSION
     addKeyHdr(combine.header, 'MBIAS', getFilename(bias))
     if sjoin is not None:
@@ -542,6 +544,7 @@ def align_combine_images(list_files, fitsfile, ref_image_fits=None, precision=10
     combine.header['IMAGES'] = str(' | '.join(all_images))
     combine.header['REFIMA'] = os.path.basename(ref_image_fits)
     combine.header['IMGSEXP'] = ' | '.join(map(str,lexp[1:].tolist() + [lexp[0]]))
+    combine.header['CMETHOD'] = method
     dir_out = os.path.dirname(ref_image_fits) if dout is None else dout
     fitsfile = join_path(fitsfile, dir_out)
     combine.header['FILENAME'] = os.path.basename(fitsfile)
