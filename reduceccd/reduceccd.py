@@ -9,12 +9,12 @@
 #                       Last Change: 2017/02/27                            #
 ############################################################################
 
-from photutils import Background2D, SigmaClip, MedianBackground, MeanBackground
 from photutils import SExtractorBackground, BiweightLocationBackground
+from photutils import Background2D, MedianBackground, MeanBackground
 from photutils import ModeEstimatorBackground, MMMBackground
+from astropy.stats import sigma_clipped_stats, SigmaClip
 from ccdproc.utils.slices import slice_from_string
 from skimage.feature import register_translation
-from astropy.stats import sigma_clipped_stats 
 from scipy.ndimage import interpolation
 from ccdproc import ImageFileCollection
 from photutils import make_source_mask
@@ -103,6 +103,7 @@ def addKeyHdr(hdr, key, value):
 def ImageFileCollectionFilter(image_file_collection, ldfilter={}, dirname=None, abspath=True, 
 	key_find='find', invert_find=False, return_mask=False, key='file', 
 	dkeys=None, copy=True):
+    image_file_collection = deepcopy(image_file_collection)
     dirname = image_file_collection.location if dirname is None else dirname
     if not abspath:
         dirname = None
